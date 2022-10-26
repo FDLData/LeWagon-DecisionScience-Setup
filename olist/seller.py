@@ -142,7 +142,43 @@ class Seller:
         'seller_id', 'share_of_five_stars', 'share_of_one_stars', 'review_score'
         """
 
-        pass  # YOUR CODE HERE
+        orders=self.data['orders']
+        order_items=self.data['order_items']
+        order_reviews=self.data['order_reviews']
+
+        order_and_seller = pd.merge(left =order_items, right=orders, on='order_id', how='inner')
+        order_and_seller = order_and_seller[['order_id', 'seller_id']]
+
+        order_and_seller_and_review = pd.merge(left=order_and_seller, right=order_reviews, on='order_id', how='inner')
+        order_and_seller_and_review = order_and_seller_and_review[['order_id', 'seller_id', 'review_score']]
+
+        average_review_score = order_and_seller_and_review.groupby('seller_id').agg({'review_score':'mean'})
+        average_review_score = average_review_score.reset_index()
+
+        total_review_score = order_and_seller_and_review.groupby('seller_id').agg({'review_score':'count'})
+        total_review_score = total_review_score.rename(columns={'review_score':'total_reviews'})
+        total_review_score = total_review_score.reset_index()
+
+        one_star_review_score = order_and_seller_and_review[order_and_seller_and_review['review_score'] ==1].groupby('seller_id').agg({'review_score':'count'})
+        one_star_review_score = one_star_review_score.rename(columns={'review_score':'one_star_review_score'})
+        one_star_review_score = one_star_review_score.reset_index()
+
+        five_star_review_score = order_and_seller_and_review[order_and_seller_and_review['review_score'] ==5].groupby('seller_id').agg({'review_score':'count'})
+        five_star_review_score = five_star_review_score.rename(columns={'review_score':'five_star_review_score'})
+        five_star_review_score = five_star_review_score.reset_index()
+
+        all_df_review_score = pd.merge(left=average_review_score, right=one_star_review_score, on='seller_id', how='left')
+        all_df_review_score = pd.merge(left=all_df_review_score, right=five_star_review_score, on='seller_id', how='left')
+        all_df_review_score = pd.merge(left=all_df_review_score, right=total_review_score, on='seller_id', how='left')
+        all_df_review_score
+
+        all_df_review_score['share_of_one_stars'] = all_df_review_score['one_star_review_score'] / all_df_review_score['total_reviews']
+        all_df_review_score['share_of_five_stars'] = all_df_review_score['five_star_review_score'] / all_df_review_score['total_reviews']
+
+        get_review_score = all_df_review_score[['seller_id', 'share_of_one_stars', 'share_of_five_stars', 'review_score']]
+        get_review_score = get_review_score.drop_duplicates()
+        return get_review_score
+
 
     def get_training_data(self):
         """
