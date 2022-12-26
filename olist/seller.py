@@ -64,6 +64,7 @@ class Seller:
         delay = ship.groupby('seller_id')\
                     .apply(delay_to_logistic_partner)\
                     .reset_index()
+
         delay.columns = ['seller_id', 'delay_to_carrier']
 
         wait = ship.groupby('seller_id')\
@@ -179,7 +180,6 @@ class Seller:
         get_review_score = get_review_score.drop_duplicates()
         return get_review_score
 
-
     def get_training_data(self):
         """
         Returns a DataFrame with:
@@ -206,3 +206,47 @@ class Seller:
                                               on='seller_id')
 
         return training_set
+
+    def get_training_profit_data(self):
+        """
+        Returns a DataFrame with:
+        ['seller_id', 'revenues', 'cost_of_reviews', 'profits']
+        """
+        sellers_df = self.get_training_data().copy()
+
+        order_items = self.data['order_items'].copy()
+        order_reviews = self.data['order_reviews'].copy()
+
+        # Sales fees
+        sellers_df['sales_fees'] = 0.10*(sellers_df['sales'])
+
+        # Subscription fees
+        sellers_df['subscription_fees'] = sellers_df['months_on_olist'] * 80
+
+        # Total revenues
+        sellers_df['revenues'] = sellers_df['sales_fees'] + sellers_df['subscription_fees']
+        sellers_df_revenues = sellers_df[['seller_id', 'revenues']].copy()
+
+        # Get review score for each seller id for each order id
+        order_items_with_review = pd.merge(left=order_items, right=order_reviews, on='order_id', how='left')
+        order_items_with_review = order_items_with_review[['order_id', 'seller_id', 'review_score']]
+        order_items_with_review = order_items_with_review.dropna()
+
+        # Map the review score with the cost associated
+        reputation_costs = {1: 100, 2: 50, 3: 40, 4: 0, 5: 0}
+
+        def review_score_mapping(int):
+            return reputation_costs[int]
+
+        order_items_with_review['review_score'] = order_items_with_review['review_score'].astype(np.int64)
+        order_items_with_review['reputation_cost'] = order_items_with_review['review_score'].apply(lambda x: review_score_mapping(x))
+
+        seller_id_reputation_costs = order_items_with_review.groupby('seller_id').agg({'reputation_cost':'sum'})
+        seller_id_reputation_costs = seller_id_reputation_costs.reset_index()
+        seller_id_reputation_costs = seller_id_reputation_costs.rename(columns={'reputation_cost':'cost_of_reviews'})
+
+        # Profit
+        sellers_profit = pd.merge(left=sellers_df_revenues, right=seller_id_reputation_costs, on='seller_id', how='left')
+        sellers_profit['profits'] = sellers_profit['revenues'] - sellers_profit['cost_of_reviews']
+
+        return sellers_profit
